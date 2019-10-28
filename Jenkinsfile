@@ -44,7 +44,7 @@ pipeline {
                         sh "docker restart catalogue"
                         
                     } else {
-                        sh "docker run -d --name catalogue --add-host catalogue-db:${DB_NETWORK_IP} --network socks -p 8080:80 -v catalogue:/files catalogue"
+                        sh "docker run -d --name catalogue --restart always --add-host catalogue-db:${DB_NETWORK_IP} --network socks -p 8080:80 catalogue"
                     }
                     //sh 'docker start catalogue' 
                 }
