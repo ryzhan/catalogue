@@ -1,68 +1,53 @@
 #!groovy
-// Check properties
-properties([disableConcurrentBuilds()])
-
-pipeline {
-        agent {
-        label 'master'
-        }
-        
-        stages {
-        stage('Preparation') {
+pipeline{
+    agent any
+       
+       stages {
+        stage('Checkout') {
             steps {
-                    git 'https://github.com/ryzhan/catalogue.git'
+                git url: 'https://github.com/ryzhan/ConfDemo3.git'
             }
-        }
+        }   
         
-        stage('Build app') {
+        stage('Build front-end') {
+            steps {
                 
-                environment {
-                    DOCKER_HOST="ssh://jenkins@app-server"
+                dir('./ansible'){
+                    sh 'ansible-playbook build_microservices.yml --tags "catalogue-build" --extra-var "BUILD_NUMBER=$BUILD_NUMBER WORKSPACE=$WORKSPACE"'
                 }
+                
+            }
             
-                steps {
-                    sh 'docker build --no-cache -t catalogue -f docker/catalogue/Dockerfile .' 
-                }
         }
         
-       stage('Deploy') {
-            environment {
-                DB_NETWORK_IP = sh(script: "cat /var/lib/jenkins/db_local_ip", , returnStdout: true).trim()
-                CHECK_CONTAINER = sh(script: "ssh -oStrictHostKeyChecking=no jenkins@app-server /tmp/check-catalogue.sh", , returnStdout: true).trim()
-                DOCKER_HOST="ssh://jenkins@app-server"
-            }
-                
-            steps {
-                
-                timeout(time:5, unit:'DAYS') {
-                    input message:'Approve deployment?', submitter: 'it-ops'
-                }
-                
-                script {
-                    
-                    if ("${CHECK_CONTAINER}" == 'catalogue') {
-                        sh "docker restart catalogue"
-                        
-                    } else {
-                        sh "docker run -d --name catalogue --restart always --add-host catalogue-db:${DB_NETWORK_IP} --network socks -p 8080:80 catalogue"
-                    }
-                    //sh 'docker start catalogue' 
-                }
-                
-                
-                    
-            }
-        }
-        
-        stage('Archive') {
+        stage('Archive workspace') {
                 steps {
                     archiveArtifacts artifacts: '**/*', fingerprint: true
                 }
         }
+           
+        stage('Run front-end') {
+            
+            environment {
+                DB_HOST = sh(script: "getent hosts db-server | cut -d' ' -f1", , returnStdout: true).trim()
+            }
+            
+            steps {
+                
+                timeout(time:5, unit:'DAYS') {
+                    input message:'Approve deployment?'
+                }
+                
+                dir('./ansible'){
+                    sh 'ansible-playbook build_microservices.yml --tags "catalogue-run" --extra-var "db_host=$DB_HOST"'
+                }
+                
+            }
+            
+        }
         
-    }
+        }
     
-        
     post {
         always {
             echo 'I have finished'
